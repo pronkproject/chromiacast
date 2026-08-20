@@ -8,7 +8,12 @@ pub const BURST_INTERVAL: Duration = Duration::from_millis(10);
 pub const MAX_UNACKED_FRAMES: usize = 120;
 
 pub const DEFAULT_VIDEO_MAX_BIT_RATE: u32 = 10_000_000;
-pub const MAX_BURST_BITRATE: u32 = 24 << 20;
+// H.264 IDR frames can be substantially larger than the stream's average
+// bitrate. Keep enough peak headroom to deliver a 720p60 key frame inside a
+// low-latency Cast playout window instead of spreading it across ~100 ms of
+// 10 ms pacer ticks. This remains a pacing ceiling; the encoder's negotiated
+// bitrate controls sustained traffic.
+pub const MAX_BURST_BITRATE: u32 = 128 << 20;
 
 pub const DEFAULT_AUDIO_SAMPLE_RATE: u32 = 48_000;
 pub const DEFAULT_AUDIO_CHANNELS: u8 = 2;
