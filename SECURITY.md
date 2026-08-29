@@ -51,8 +51,9 @@ frame was flushed to the live TLS session.
 
 ## Supported versions
 
-Security fixes are applied to the current development branch. No stable
-release series exists yet.
+Security fixes are applied to the current development branch and the most
+recent published release. Earlier 0.x releases are not supported after a
+successor is published.
 
 ## Reporting a vulnerability
 
