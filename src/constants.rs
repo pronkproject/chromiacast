@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 pub const DEFAULT_TARGET_PLAYOUT_DELAY: Duration = Duration::from_millis(400);
+pub const ADAPTIVE_PLAYOUT_DELAY_EXTENSION: &str = "adaptive_playout_delay";
 
 pub const RTCP_REPORT_INTERVAL: Duration = Duration::from_millis(500);
 pub const BURST_INTERVAL: Duration = Duration::from_millis(10);
