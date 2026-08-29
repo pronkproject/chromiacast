@@ -11,7 +11,7 @@ use crate::codec::StreamType;
 use crate::constants::{
     ADAPTIVE_PLAYOUT_DELAY_EXTENSION, MAX_RTP_PACKET_SIZE_IPV4, MAX_RTP_PACKET_SIZE_IPV6,
 };
-use crate::error::{EnqueueError, Error, SenderError};
+use crate::error::{EnqueueError, Error, PlayoutDelayError, SenderError};
 use crate::frame::{EncodedFrame, FrameId};
 use crate::offer::Offer;
 use crate::transport::Transport;
@@ -222,6 +222,32 @@ impl SenderSession {
     /// RTP extension.
     pub fn supports_target_playout_delay_updates(&self) -> bool {
         self.supports_adaptive_playout_delay
+    }
+
+    /// Change the target end-to-end playout delay for every accepted stream.
+    ///
+    /// The change is attached to the next frame on each stream using Cast's
+    /// negotiated adaptive playout-delay RTP extension. Calling this again
+    /// with the same delay schedules the extension again, allowing a caller
+    /// to retry until receiver feedback confirms the change.
+    pub async fn set_target_playout_delay(&self, delay: Duration) -> Result<(), PlayoutDelayError> {
+        if !valid_playout_delay(delay) {
+            return Err(PlayoutDelayError::InvalidDelay);
+        }
+        if !self.supports_adaptive_playout_delay {
+            return Err(PlayoutDelayError::Unsupported);
+        }
+        let (result_sender, result_receiver) = oneshot::channel();
+        self.command_sender
+            .send(StreamCommand::SetTargetPlayoutDelay {
+                delay,
+                result_sender,
+            })
+            .await
+            .map_err(|_| PlayoutDelayError::SessionClosed)?;
+        result_receiver
+            .await
+            .map_err(|_| PlayoutDelayError::SessionClosed)?
     }
 
     /// Return a current pressure and receiver-feedback snapshot.
