@@ -4,7 +4,7 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use crate::codec::{AudioCodec, CastMode, Framerate, Resolution, VideoCodec};
-use crate::constants::DEFAULT_TARGET_PLAYOUT_DELAY;
+use crate::constants::{ADAPTIVE_PLAYOUT_DELAY_EXTENSION, DEFAULT_TARGET_PLAYOUT_DELAY};
 use crate::crypto::FrameCrypto;
 use crate::sync_source;
 
@@ -174,7 +174,7 @@ impl OfferBuilder {
                 aes_iv_mask: FrameCrypto::generate_iv_mask(),
                 rtp_timebase: audio.sample_rate,
                 codec_name: audio.codec.codec_name().to_string(),
-                rtp_extensions: vec!["adaptive_playout_delay".to_string()],
+                rtp_extensions: vec![ADAPTIVE_PLAYOUT_DELAY_EXTENSION.to_string()],
                 audio_extra: Some(AudioExtra {
                     bit_rate: audio.bit_rate,
                 }),
@@ -195,7 +195,7 @@ impl OfferBuilder {
                 aes_iv_mask: FrameCrypto::generate_iv_mask(),
                 rtp_timebase: crate::constants::RTP_VIDEO_TIMEBASE,
                 codec_name: video.codec.codec_name().to_string(),
-                rtp_extensions: vec!["adaptive_playout_delay".to_string()],
+                rtp_extensions: vec![ADAPTIVE_PLAYOUT_DELAY_EXTENSION.to_string()],
                 audio_extra: None,
                 video_extra: Some(VideoExtra {
                     max_frame_rate: video.max_frame_rate,
