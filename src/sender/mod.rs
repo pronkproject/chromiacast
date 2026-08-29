@@ -3,6 +3,7 @@ pub(crate) mod stats;
 pub(crate) mod stream;
 
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::answer::Answer;
@@ -252,6 +253,12 @@ impl SenderSession {
     }
 }
 
+fn valid_playout_delay(delay: Duration) -> bool {
+    let milliseconds = delay.as_millis();
+    (1..=u128::from(u16::MAX)).contains(&milliseconds)
+        && delay == Duration::from_millis(milliseconds as u64)
+}
+
 fn media_address(mut endpoint: SocketAddr, port: u16) -> SocketAddr {
     endpoint.set_port(port);
     endpoint
@@ -294,5 +301,18 @@ mod tests {
         let media = media_address(endpoint, 2344);
 
         assert_eq!(media, "[fe80::1%7]:2344".parse().unwrap());
+    }
+
+    #[test]
+    fn playout_delay_wire_value_requires_exact_bounded_milliseconds() {
+        assert!(valid_playout_delay(Duration::from_millis(1)));
+        assert!(valid_playout_delay(Duration::from_millis(u64::from(
+            u16::MAX
+        ))));
+        assert!(!valid_playout_delay(Duration::ZERO));
+        assert!(!valid_playout_delay(Duration::from_nanos(1)));
+        assert!(!valid_playout_delay(Duration::from_millis(
+            u64::from(u16::MAX) + 1
+        )));
     }
 }
