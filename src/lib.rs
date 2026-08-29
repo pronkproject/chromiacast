@@ -35,7 +35,7 @@ pub use control::{
 };
 #[cfg(feature = "discovery")]
 pub use discovery::{discover, CastCapabilities, CastDevice, CastEndpoint};
-pub use error::{EnqueueError, Error, SenderError};
+pub use error::{EnqueueError, Error, PlayoutDelayError, SenderError};
 pub use frame::{EncodedFrame, FrameDependency, FrameId};
 pub use offer::{AudioStreamConfig, Offer, OfferBuilder, VideoStreamConfig};
 pub use sender::{SenderEvent, SenderSession, SessionStatistics, StreamHandle, StreamStatistics};
