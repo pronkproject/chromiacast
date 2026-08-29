@@ -47,7 +47,7 @@ impl RtpPacketizer {
         let num_packets = if payload.is_empty() {
             1
         } else {
-            (payload.len() + self.max_payload_size - 1) / self.max_payload_size
+            payload.len().div_ceil(self.max_payload_size)
         };
         let max_packet_id = (num_packets - 1) as u16;
 
