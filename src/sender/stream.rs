@@ -26,6 +26,7 @@ pub(crate) struct StreamState {
     rtp_timebase: u32,
     target_playout_delay: Duration,
     adaptive_playout_delay: bool,
+    pending_playout_delay: Option<Duration>,
 
     next_frame_id: FrameId,
     checkpoint: FrameId,
@@ -104,6 +105,7 @@ impl StreamState {
             rtp_timebase: parameters.rtp_timebase,
             target_playout_delay: parameters.target_playout_delay,
             adaptive_playout_delay: parameters.adaptive_playout_delay,
+            pending_playout_delay: None,
             next_frame_id: FrameId::first(),
             checkpoint: FrameId::first() + -1,
             pending: Box::new(std::array::from_fn(|_| None)),
@@ -160,7 +162,7 @@ impl StreamState {
             is_key,
             referenced_frame_id,
             rtp_timestamp,
-            None,
+            self.pending_playout_delay.take(),
             &data.freeze(),
         );
         self.send_queue.extend(
@@ -196,6 +198,12 @@ impl StreamState {
 
     pub fn supports_adaptive_playout_delay(&self) -> bool {
         self.adaptive_playout_delay
+    }
+
+    pub fn set_target_playout_delay(&mut self, delay: Duration) {
+        debug_assert!(self.adaptive_playout_delay);
+        self.target_playout_delay = delay;
+        self.pending_playout_delay = Some(delay);
     }
 
     pub fn in_flight_count(&self) -> usize {
@@ -534,6 +542,33 @@ mod tests {
             .enqueue_frame(make_frame(FrameDependency::KeyFrame, 1_000))
             .unwrap();
         assert_eq!(stream.last_rtp_timestamp, 90_000);
+    }
+
+    #[test]
+    fn playout_delay_update_is_attached_to_exactly_one_frame() {
+        let mut stream = make_stream();
+        stream.set_target_playout_delay(Duration::from_millis(33));
+        stream
+            .enqueue_frame(make_frame(FrameDependency::KeyFrame, 0))
+            .unwrap();
+
+        let packet = stream.next_packet().unwrap().packet;
+        assert_eq!(packet.data[12] & 0x3f, 1);
+        assert_eq!(u16::from_be_bytes([packet.data[21], packet.data[22]]), 33);
+
+        stream
+            .enqueue_frame(make_frame(FrameDependency::Delta, 10))
+            .unwrap();
+        let packet = stream.next_packet().unwrap().packet;
+        assert_eq!(packet.data[12] & 0x3f, 0);
+
+        stream.set_target_playout_delay(Duration::from_millis(33));
+        stream
+            .enqueue_frame(make_frame(FrameDependency::Delta, 20))
+            .unwrap();
+        let packet = stream.next_packet().unwrap().packet;
+        assert_eq!(packet.data[12] & 0x3f, 1);
+        assert_eq!(u16::from_be_bytes([packet.data[21], packet.data[22]]), 33);
     }
 
     #[test]
