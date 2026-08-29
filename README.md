@@ -9,6 +9,26 @@ The crate deliberately does not depend on PipeWire, GStreamer, GNOME, or an
 encoder. Those belong in adapters and applications built on top of this
 protocol boundary.
 
+## Using the crate
+
+Add the protocol library to a Rust project with:
+
+```sh
+cargo add chromiacast
+```
+
+The default feature set provides authenticated Cast control and streaming.
+Enable `discovery` for mDNS discovery or `android-tv` for Android TV pairing
+and remote control:
+
+```toml
+chromiacast = { version = "0.1", features = ["discovery", "android-tv"] }
+```
+
+The `dangerous-unverified` feature exists only for protocol test doubles. It
+must not be enabled as a production fallback. See the
+[API documentation](https://docs.rs/chromiacast) for the complete interface.
+
 ## Status
 
 The library currently provides:
