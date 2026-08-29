@@ -56,6 +56,20 @@ pub enum EnqueueError {
     SessionClosed,
 }
 
+/// Non-terminal rejection of a target playout-delay update.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum PlayoutDelayError {
+    #[error("target playout delay must be a whole number of milliseconds between 1 and 65535")]
+    InvalidDelay,
+
+    #[error("receiver did not negotiate adaptive playout-delay updates for every active stream")]
+    Unsupported,
+
+    #[error("session is closed or shutting down")]
+    SessionClosed,
+}
+
 /// Terminal failure from a streaming sender task.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
