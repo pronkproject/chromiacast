@@ -74,12 +74,16 @@ impl Serialize for Framerate {
 impl<'de> Deserialize<'de> for Framerate {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        let (num, den) = s
-            .split_once('/')
-            .ok_or_else(|| serde::de::Error::custom("expected num/den"))?;
+        let (numerator, denominator) = match s.split_once('/') {
+            Some((numerator, denominator)) => (
+                numerator.parse().map_err(serde::de::Error::custom)?,
+                denominator.parse().map_err(serde::de::Error::custom)?,
+            ),
+            None => (s.parse().map_err(serde::de::Error::custom)?, 1),
+        };
         Ok(Framerate {
-            numerator: num.parse().map_err(serde::de::Error::custom)?,
-            denominator: den.parse().map_err(serde::de::Error::custom)?,
+            numerator,
+            denominator,
         })
     }
 }
@@ -161,6 +165,14 @@ mod tests {
     fn framerate_fractional() {
         let fr = Framerate::new(30000, 1001);
         assert!((fr.as_f64() - 29.97).abs() < 0.01);
+    }
+
+    #[test]
+    fn framerate_accepts_protocol_integer_form() {
+        assert_eq!(
+            serde_json::from_str::<Framerate>("\"60\"").unwrap(),
+            Framerate::new(60, 1)
+        );
     }
 
     #[test]
