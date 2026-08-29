@@ -116,6 +116,19 @@ fn build_test_answer() -> Answer {
     .unwrap()
 }
 
+fn build_adaptive_answer() -> Answer {
+    serde_json::from_value(serde_json::json!({
+        "udpPort": 2344,
+        "sendIndexes": [0, 1],
+        "ssrcs": [60000, 30000],
+        "rtpExtensions": [
+            ["adaptive_playout_delay"],
+            ["adaptive_playout_delay"]
+        ]
+    }))
+    .unwrap()
+}
+
 fn encoded_frame(
     dependency: FrameDependency,
     data: impl Into<Bytes>,
@@ -250,6 +263,60 @@ async fn start_session_and_send_frame() {
     // Should have sent RTP packets
     assert!(control.sent_count() > 0);
 
+    session.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn adaptive_playout_delay_updates_every_negotiated_stream() {
+    let offer = build_test_offer();
+    let answer = build_adaptive_answer();
+    let audio_sync_source = offer_sync_source(&offer, 0);
+    let video_sync_source = offer_sync_source(&offer, 1);
+    let (transport, control) = mock_transport();
+    let (session, _events) =
+        SenderSession::start(&offer, &answer, IpAddr::V4(Ipv4Addr::LOCALHOST), transport)
+            .await
+            .unwrap();
+
+    assert!(session.supports_target_playout_delay_updates());
+    session
+        .set_target_playout_delay(Duration::from_millis(33))
+        .await
+        .unwrap();
+    session
+        .audio()
+        .unwrap()
+        .send(encoded_frame(
+            FrameDependency::KeyFrame,
+            Bytes::from_static(b"opus"),
+            Duration::ZERO,
+        ))
+        .await
+        .unwrap();
+    session
+        .video()
+        .unwrap()
+        .send(encoded_frame(
+            FrameDependency::KeyFrame,
+            Bytes::from_static(b"h264"),
+            Duration::ZERO,
+        ))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(30)).await;
+
+    let sent = control.take_sent();
+    for sync_source in [audio_sync_source, video_sync_source] {
+        let packet = sent
+            .iter()
+            .find(|packet| {
+                packet.len() >= 23
+                    && u32::from_be_bytes(packet[8..12].try_into().unwrap()) == sync_source
+                    && packet[12] & 0x3f == 1
+            })
+            .unwrap();
+        assert_eq!(u16::from_be_bytes([packet[21], packet[22]]), 33);
+    }
     session.shutdown().await.unwrap();
 }
 
