@@ -144,6 +144,15 @@ impl Answer {
         {
             return Err("ssrcs contains a duplicate receiver SSRC".to_string());
         }
+        if self
+            .constraints
+            .as_ref()
+            .and_then(|constraints| constraints.video.as_ref())
+            .and_then(|video| video.max_dimensions)
+            .is_some_and(|dimensions| dimensions.width == 0 || dimensions.height == 0)
+        {
+            return Err("video maxDimensions contains a zero dimension".to_string());
+        }
         Ok(())
     }
 }
