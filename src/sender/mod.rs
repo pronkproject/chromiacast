@@ -7,7 +7,9 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::answer::Answer;
 use crate::codec::StreamType;
-use crate::constants::{MAX_RTP_PACKET_SIZE_IPV4, MAX_RTP_PACKET_SIZE_IPV6};
+use crate::constants::{
+    ADAPTIVE_PLAYOUT_DELAY_EXTENSION, MAX_RTP_PACKET_SIZE_IPV4, MAX_RTP_PACKET_SIZE_IPV6,
+};
 use crate::error::{EnqueueError, Error, SenderError};
 use crate::frame::{EncodedFrame, FrameId};
 use crate::offer::Offer;
@@ -105,6 +107,15 @@ impl SenderSession {
             let target_playout_delay = offer.stream_target_delay(offer_index).ok_or_else(|| {
                 Error::NegotiationFailed(format!("stream {offer_index} omitted its target delay"))
             })?;
+            let adaptive_playout_delay = answer
+                .rtp_extensions
+                .as_ref()
+                .and_then(|streams| streams.get(accepted_index))
+                .is_some_and(|extensions| {
+                    extensions
+                        .iter()
+                        .any(|extension| extension == ADAPTIVE_PLAYOUT_DELAY_EXTENSION)
+                });
             let stream_type = offer.stream_type(offer_index).ok_or_else(|| {
                 Error::NegotiationFailed(format!("send_index {} not found in offer", offer_index))
             })?;
@@ -120,6 +131,7 @@ impl SenderSession {
                 rtp_payload_type,
                 rtp_timebase,
                 target_playout_delay,
+                adaptive_playout_delay,
                 aes_key,
                 aes_iv_mask,
                 max_packet_size,

@@ -25,6 +25,7 @@ pub(crate) struct StreamState {
     receiver_sync_source: SyncSource,
     rtp_timebase: u32,
     target_playout_delay: Duration,
+    adaptive_playout_delay: bool,
 
     next_frame_id: FrameId,
     checkpoint: FrameId,
@@ -83,6 +84,7 @@ pub(crate) struct StreamParameters {
     pub rtp_payload_type: u8,
     pub rtp_timebase: u32,
     pub target_playout_delay: Duration,
+    pub adaptive_playout_delay: bool,
     pub aes_key: [u8; 16],
     pub aes_iv_mask: [u8; 16],
     pub max_packet_size: usize,
@@ -101,6 +103,7 @@ impl StreamState {
             receiver_sync_source: parameters.receiver_sync_source,
             rtp_timebase: parameters.rtp_timebase,
             target_playout_delay: parameters.target_playout_delay,
+            adaptive_playout_delay: parameters.adaptive_playout_delay,
             next_frame_id: FrameId::first(),
             checkpoint: FrameId::first() + -1,
             pending: Box::new(std::array::from_fn(|_| None)),
@@ -189,6 +192,10 @@ impl StreamState {
 
     pub fn next_frame_id(&self) -> FrameId {
         self.next_frame_id
+    }
+
+    pub fn supports_adaptive_playout_delay(&self) -> bool {
+        self.adaptive_playout_delay
     }
 
     pub fn in_flight_count(&self) -> usize {
@@ -486,6 +493,7 @@ mod tests {
             rtp_payload_type: 101,
             rtp_timebase: 90_000,
             target_playout_delay: Duration::from_millis(400),
+            adaptive_playout_delay: true,
             aes_key: [0xAA; 16],
             aes_iv_mask: [0xBB; 16],
             max_packet_size: 1472,
