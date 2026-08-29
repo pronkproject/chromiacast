@@ -153,6 +153,14 @@ impl Answer {
         {
             return Err("video maxDimensions contains a zero dimension".to_string());
         }
+        if self
+            .display
+            .as_ref()
+            .and_then(|display| display.dimensions)
+            .is_some_and(|dimensions| dimensions.width == 0 || dimensions.height == 0)
+        {
+            return Err("display dimensions contains a zero dimension".to_string());
+        }
         Ok(())
     }
 }
