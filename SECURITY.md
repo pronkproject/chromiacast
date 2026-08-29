@@ -57,6 +57,6 @@ release series exists yet.
 ## Reporting a vulnerability
 
 Please report suspected vulnerabilities privately through the repository's
-[GitHub security advisory form](https://github.com/halfline/chromiacast/security/advisories/new).
+[GitHub security advisory form](https://github.com/pronkproject/chromiacast/security/advisories/new).
 Include the affected revision, a description of the impact, and reproduction
 details when possible. Avoid filing a public issue until a fix is available.
