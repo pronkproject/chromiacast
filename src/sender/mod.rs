@@ -30,6 +30,7 @@ pub struct SenderSession {
     command_sender: mpsc::Sender<StreamCommand>,
     has_audio: bool,
     has_video: bool,
+    supports_adaptive_playout_delay: bool,
     task: tokio::task::JoinHandle<Result<(), SenderError>>,
 }
 
@@ -163,6 +164,10 @@ impl SenderSession {
 
         let has_audio = audio_stream.is_some();
         let has_video = video_stream.is_some();
+        let supports_adaptive_playout_delay = audio_stream
+            .iter()
+            .chain(video_stream.iter())
+            .all(StreamState::supports_adaptive_playout_delay);
 
         let (command_sender, command_receiver) = mpsc::channel(64);
         let (event_sender, event_receiver) = mpsc::channel(64);
@@ -181,6 +186,7 @@ impl SenderSession {
                 command_sender,
                 has_audio,
                 has_video,
+                supports_adaptive_playout_delay,
                 task,
             },
             event_receiver,
@@ -209,6 +215,12 @@ impl SenderSession {
         } else {
             None
         }
+    }
+
+    /// Whether every accepted stream negotiated the adaptive playout-delay
+    /// RTP extension.
+    pub fn supports_target_playout_delay_updates(&self) -> bool {
+        self.supports_adaptive_playout_delay
     }
 
     /// Return a current pressure and receiver-feedback snapshot.
