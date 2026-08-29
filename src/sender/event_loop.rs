@@ -7,7 +7,7 @@ use tokio::time::{interval_at, Interval, MissedTickBehavior};
 
 use crate::codec::StreamType;
 use crate::constants::{BURST_INTERVAL, MAX_BURST_BITRATE, RTCP_REPORT_INTERVAL};
-use crate::error::{EnqueueError, SenderError};
+use crate::error::{EnqueueError, PlayoutDelayError, SenderError};
 use crate::frame::{EncodedFrame, FrameId};
 use crate::rtcp::{self, CompoundRtcpPacket, SenderReportBuilder};
 use crate::rtp;
@@ -99,6 +99,10 @@ pub(crate) enum StreamCommand {
     Statistics {
         result_sender: oneshot::Sender<SessionStatistics>,
     },
+    SetTargetPlayoutDelay {
+        delay: Duration,
+        result_sender: oneshot::Sender<Result<(), PlayoutDelayError>>,
+    },
     Shutdown {
         result_sender: oneshot::Sender<()>,
     },
@@ -136,6 +140,14 @@ pub(crate) async fn run<T: Transport>(
                     }
                     Some(StreamCommand::Statistics { result_sender }) => {
                         let _ = result_sender.send(session_statistics(&audio_stream, &video_stream));
+                    }
+                    Some(StreamCommand::SetTargetPlayoutDelay { delay, result_sender }) => {
+                        let result = set_target_playout_delay(
+                            &mut audio_stream,
+                            &mut video_stream,
+                            delay,
+                        );
+                        let _ = result_sender.send(result);
                     }
                     Some(StreamCommand::Shutdown { result_sender }) => {
                         let _ = result_sender.send(());
@@ -308,6 +320,27 @@ pub(crate) async fn run<T: Transport>(
             }
         }
     }
+}
+
+fn set_target_playout_delay(
+    audio: &mut Option<StreamState>,
+    video: &mut Option<StreamState>,
+    delay: Duration,
+) -> Result<(), PlayoutDelayError> {
+    if audio
+        .iter()
+        .chain(video.iter())
+        .any(|stream| !stream.supports_adaptive_playout_delay())
+    {
+        return Err(PlayoutDelayError::Unsupported);
+    }
+    if let Some(audio) = audio {
+        audio.set_target_playout_delay(delay);
+    }
+    if let Some(video) = video {
+        video.set_target_playout_delay(delay);
+    }
+    Ok(())
 }
 
 fn process_feedback(
