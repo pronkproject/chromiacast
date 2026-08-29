@@ -254,6 +254,26 @@ async fn start_session_and_send_frame() {
 }
 
 #[tokio::test]
+async fn playout_delay_update_requires_receiver_negotiation() {
+    let offer = build_test_offer();
+    let answer = build_test_answer();
+    let (transport, _control) = mock_transport();
+    let (session, _events) =
+        SenderSession::start(&offer, &answer, IpAddr::V4(Ipv4Addr::LOCALHOST), transport)
+            .await
+            .unwrap();
+
+    assert!(!session.supports_target_playout_delay_updates());
+    assert_eq!(
+        session
+            .set_target_playout_delay(Duration::from_millis(33))
+            .await,
+        Err(PlayoutDelayError::Unsupported)
+    );
+    session.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn audio_and_video_both_stream() {
     let offer = build_test_offer();
     let answer = build_test_answer();
