@@ -26,7 +26,9 @@ mod sync_source;
 mod tls;
 mod transport;
 
-pub use answer::{Answer, AudioConstraints, Constraints, DisplayDescription, VideoConstraints};
+pub use answer::{
+    Answer, AudioConstraints, Constraints, Dimensions, DisplayDescription, VideoConstraints,
+};
 pub use codec::{AudioCodec, CastMode, Framerate, Resolution, StreamType, VideoCodec};
 pub use control::{
     AppAvailability, AuthenticatedDeviceInfo, AuthenticatedEurekaInfo, CastApp, CastConnection,

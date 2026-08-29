@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::Deserialize;
 
-use crate::codec::Resolution;
+use crate::codec::{Framerate, Resolution};
 
 /// Answer from a Cast receiver in response to an OFFER.
 #[derive(Debug, Clone, Deserialize)]
@@ -65,7 +65,7 @@ pub struct VideoConstraints {
     #[serde(default, rename = "minResolution")]
     pub min_resolution: Option<Resolution>,
     #[serde(default, rename = "maxDimensions")]
-    pub max_dimensions: Option<Resolution>,
+    pub max_dimensions: Option<Dimensions>,
     #[serde(default, rename = "minBitRate")]
     pub min_bit_rate: Option<u32>,
     #[serde(default, rename = "maxBitRate")]
@@ -74,11 +74,21 @@ pub struct VideoConstraints {
     pub max_delay: Option<u32>,
 }
 
+/// Width, height, and optional rate ceiling from a Cast receiver ANSWER.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
+pub struct Dimensions {
+    pub width: u32,
+    pub height: u32,
+    #[serde(default, rename = "frameRate")]
+    pub frame_rate: Option<Framerate>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
 pub struct DisplayDescription {
     #[serde(default)]
-    pub dimensions: Option<Resolution>,
+    pub dimensions: Option<Dimensions>,
     #[serde(default, rename = "aspectRatio")]
     pub aspect_ratio: Option<String>,
     #[serde(default)]
@@ -171,13 +181,13 @@ mod tests {
                     "maxBitRate": 256000
                 },
                 "video": {
-                    "maxDimensions": {"width": 1920, "height": 1080},
+                    "maxDimensions": {"width": 1920, "height": 1080, "frameRate": "60"},
                     "maxBitRate": 5000000,
                     "maxDelay": 1500
                 }
             },
             "display": {
-                "dimensions": {"width": 1920, "height": 1080},
+                "dimensions": {"width": 3840, "height": 2160, "frameRate": "60000/1001"},
                 "aspectRatio": "16:9",
                 "scaling": "sender"
             }
@@ -190,9 +200,18 @@ mod tests {
         let video = constraints.video.as_ref().unwrap();
         assert_eq!(video.max_bit_rate, Some(5_000_000));
         assert_eq!(video.max_delay, Some(1500));
+        assert_eq!(
+            video.max_dimensions.unwrap().frame_rate,
+            Some(Framerate::new(60, 1))
+        );
 
         let display = answer.display.as_ref().unwrap();
         assert_eq!(display.aspect_ratio.as_deref(), Some("16:9"));
+        assert_eq!(display.dimensions.unwrap().width, 3840);
+        assert_eq!(
+            display.dimensions.unwrap().frame_rate,
+            Some(Framerate::new(60_000, 1_001))
+        );
     }
 
     #[test]
