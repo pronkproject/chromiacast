@@ -81,6 +81,11 @@ impl<'de> Deserialize<'de> for Framerate {
             ),
             None => (s.parse().map_err(serde::de::Error::custom)?, 1),
         };
+        if numerator == 0 || denominator == 0 {
+            return Err(serde::de::Error::custom(
+                "framerate numerator and denominator must be nonzero",
+            ));
+        }
         Ok(Framerate {
             numerator,
             denominator,
@@ -168,11 +173,14 @@ mod tests {
     }
 
     #[test]
-    fn framerate_accepts_protocol_integer_form() {
+    fn framerate_accepts_protocol_integer_form_and_rejects_zero() {
         assert_eq!(
             serde_json::from_str::<Framerate>("\"60\"").unwrap(),
             Framerate::new(60, 1)
         );
+        for invalid in ["\"0\"", "\"60/0\""] {
+            assert!(serde_json::from_str::<Framerate>(invalid).is_err());
+        }
     }
 
     #[test]
