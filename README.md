@@ -22,7 +22,7 @@ Enable `discovery` for mDNS discovery or `android-tv` for Android TV pairing
 and remote control:
 
 ```toml
-chromiacast = { version = "0.2", features = ["discovery", "android-tv"] }
+chromiacast = { version = "0.3", features = ["discovery", "android-tv"] }
 ```
 
 The `dangerous-unverified` feature exists only for protocol test doubles. It

@@ -2,6 +2,22 @@
 
 All notable changes to Chromiacast are documented in this file.
 
+## 0.3.0 - 2026-08-31
+
+This release makes outbound Cast stream configuration checked before it reaches
+the wire:
+
+- `Resolution::new()` and `Framerate::new()` now reject zero components and
+  their fields are read-only;
+- `OfferBuilder::build()` now returns `Result<Offer, OfferError>`;
+- offers reject empty stream sets, zero rates and channel counts, missing video
+  resolutions, and target delays that cannot be represented exactly; and
+- CI now tests the minimal crate and each independently selectable feature in
+  addition to the complete feature set.
+
+The constructor and builder return-type changes require consumers of 0.2.x to
+handle configuration errors when updating to 0.3.0.
+
 ## 0.2.0 - 2026-08-30
 
 This release adds:
