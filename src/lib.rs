@@ -42,7 +42,7 @@ pub use control::{
 pub use discovery::{discover, CastCapabilities, CastDevice, CastEndpoint};
 pub use error::{EnqueueError, Error, PlayoutDelayError, SenderError};
 pub use frame::{EncodedFrame, FrameDependency, FrameId};
-pub use offer::{AudioStreamConfig, Offer, OfferBuilder, VideoStreamConfig};
+pub use offer::{AudioStreamConfig, Offer, OfferBuilder, OfferError, VideoStreamConfig};
 pub use sender::{SenderEvent, SenderSession, SessionStatistics, StreamHandle, StreamStatistics};
 pub use setup::{SetupDeviceInfo, SetupInfoOutcome, SETUP_PORT};
 pub use transport::{Transport, UdpTransport};

@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             resolutions: vec![Resolution::new(WIDTH as u32, HEIGHT as u32)?],
             target_delay: Duration::from_millis(400),
         })
-        .build();
+        .build()?;
     let answer = connection.exchange_offer(&offer, &app).await?;
     println!(
         "Negotiated video stream on receiver UDP port {} (receiver SSRC {:?}).",

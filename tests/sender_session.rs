@@ -94,6 +94,7 @@ fn build_test_offer() -> Offer {
         .audio(AudioStreamConfig::default())
         .video(VideoStreamConfig::default())
         .build()
+        .unwrap()
 }
 
 fn offer_sync_source(offer: &Offer, index: usize) -> u32 {

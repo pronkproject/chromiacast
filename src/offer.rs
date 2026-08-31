@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
+use thiserror::Error;
 
 use crate::codec::{AudioCodec, CastMode, Framerate, Resolution, VideoCodec};
 use crate::constants::{ADAPTIVE_PLAYOUT_DELAY_EXTENSION, DEFAULT_TARGET_PLAYOUT_DELAY};
@@ -142,6 +143,19 @@ pub struct OfferBuilder {
     video: Vec<VideoStreamConfig>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum OfferError {
+    #[error("an offer must contain at least one stream")]
+    NoStreams,
+
+    #[error("audio stream {index} is invalid: {reason}")]
+    InvalidAudioStream { index: usize, reason: &'static str },
+
+    #[error("video stream {index} is invalid: {reason}")]
+    InvalidVideoStream { index: usize, reason: &'static str },
+}
+
 impl OfferBuilder {
     pub fn cast_mode(mut self, mode: CastMode) -> Self {
         self.cast_mode = mode;
@@ -158,7 +172,43 @@ impl OfferBuilder {
         self
     }
 
-    pub fn build(self) -> Offer {
+    pub fn build(self) -> Result<Offer, OfferError> {
+        if self.audio.is_empty() && self.video.is_empty() {
+            return Err(OfferError::NoStreams);
+        }
+
+        for (index, audio) in self.audio.iter().enumerate() {
+            let reason = if audio.bit_rate == 0 {
+                Some("bit rate must be nonzero")
+            } else if audio.sample_rate == 0 {
+                Some("sample rate must be nonzero")
+            } else if audio.channels == 0 {
+                Some("channel count must be nonzero")
+            } else if !valid_target_delay(audio.target_delay) {
+                Some("target delay must be a whole number of milliseconds between 1 and 4294967295")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                return Err(OfferError::InvalidAudioStream { index, reason });
+            }
+        }
+
+        for (index, video) in self.video.iter().enumerate() {
+            let reason = if video.max_bit_rate == 0 {
+                Some("maximum bit rate must be nonzero")
+            } else if video.resolutions.is_empty() {
+                Some("at least one resolution is required")
+            } else if !valid_target_delay(video.target_delay) {
+                Some("target delay must be a whole number of milliseconds between 1 and 4294967295")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                return Err(OfferError::InvalidVideoStream { index, reason });
+            }
+        }
+
         let mut streams = Vec::new();
         let mut index = 0;
 
@@ -206,11 +256,17 @@ impl OfferBuilder {
             index += 1;
         }
 
-        Offer {
+        Ok(Offer {
             cast_mode: self.cast_mode,
             streams,
-        }
+        })
     }
+}
+
+fn valid_target_delay(delay: Duration) -> bool {
+    let milliseconds = delay.as_millis();
+    (1..=u128::from(u32::MAX)).contains(&milliseconds)
+        && delay == Duration::from_millis(milliseconds as u64)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -311,7 +367,8 @@ mod tests {
         let offer = Offer::builder()
             .audio(AudioStreamConfig::default())
             .video(VideoStreamConfig::default())
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(offer.streams.len(), 2);
         assert_eq!(offer.streams[0].index, 0);
@@ -325,7 +382,8 @@ mod tests {
         let offer = Offer::builder()
             .audio(AudioStreamConfig::default())
             .video(VideoStreamConfig::default())
-            .build();
+            .build()
+            .unwrap();
 
         let json = serde_json::to_value(&offer).unwrap();
         assert_eq!(json["castMode"], "mirroring");
@@ -354,17 +412,59 @@ mod tests {
 
     #[test]
     fn offer_generates_unique_keys() {
-        let o1 = Offer::builder().audio(AudioStreamConfig::default()).build();
-        let o2 = Offer::builder().audio(AudioStreamConfig::default()).build();
+        let o1 = Offer::builder()
+            .audio(AudioStreamConfig::default())
+            .build()
+            .unwrap();
+        let o2 = Offer::builder()
+            .audio(AudioStreamConfig::default())
+            .build()
+            .unwrap();
         assert_ne!(o1.streams[0].aes_key, o2.streams[0].aes_key);
     }
 
     #[test]
     fn stream_accessors() {
-        let offer = Offer::builder().audio(AudioStreamConfig::default()).build();
+        let offer = Offer::builder()
+            .audio(AudioStreamConfig::default())
+            .build()
+            .unwrap();
 
         assert!(offer.stream_aes_key(0).is_some());
         assert!(offer.stream_aes_key(99).is_none());
         assert_eq!(offer.stream_rtp_timebase(0), Some(48_000));
+    }
+
+    #[test]
+    fn offer_rejects_invalid_stream_configuration() {
+        assert!(matches!(
+            Offer::builder().build(),
+            Err(OfferError::NoStreams)
+        ));
+
+        let audio = AudioStreamConfig {
+            sample_rate: 0,
+            ..AudioStreamConfig::default()
+        };
+        assert!(matches!(
+            Offer::builder().audio(audio).build(),
+            Err(OfferError::InvalidAudioStream { .. })
+        ));
+
+        let mut video = VideoStreamConfig::default();
+        video.resolutions.clear();
+        assert!(matches!(
+            Offer::builder().video(video).build(),
+            Err(OfferError::InvalidVideoStream { .. })
+        ));
+
+        let video = VideoStreamConfig {
+            target_delay: Duration::from_nanos(1),
+            ..VideoStreamConfig::default()
+        };
+        assert!(matches!(
+            Offer::builder().video(video).build(),
+            Err(OfferError::InvalidVideoStream { .. })
+        ));
     }
 }

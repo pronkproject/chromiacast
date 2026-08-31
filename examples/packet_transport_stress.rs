@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             resolutions: vec![Resolution::new(1920, 1080)?],
             target_delay: Duration::from_millis(400),
         })
-        .build();
+        .build()?;
     let answer = connection.exchange_offer(&offer, &app).await?;
     let bind_ip = if receiver_address.is_ipv6() {
         IpAddr::V6(Ipv6Addr::UNSPECIFIED)

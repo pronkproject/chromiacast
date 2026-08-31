@@ -176,7 +176,8 @@ async fn rendered_pixels_match_input() {
             resolutions: vec![Resolution::new(WIDTH as u32, HEIGHT as u32).unwrap()],
             target_delay: Duration::from_millis(400),
         })
-        .build();
+        .build()
+        .unwrap();
 
     let answer = conn.exchange_offer(&offer, &app).await.unwrap();
 
