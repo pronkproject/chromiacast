@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(video.max_delay, Some(1500));
         assert_eq!(
             video.max_dimensions.unwrap().frame_rate,
-            Some(Framerate::new(60, 1))
+            Some(Framerate::new(60, 1).unwrap())
         );
 
         let display = answer.display.as_ref().unwrap();
@@ -227,7 +227,7 @@ mod tests {
         assert_eq!(display.dimensions.unwrap().width, 3840);
         assert_eq!(
             display.dimensions.unwrap().frame_rate,
-            Some(Framerate::new(60_000, 1_001))
+            Some(Framerate::new(60_000, 1_001).unwrap())
         );
     }
 

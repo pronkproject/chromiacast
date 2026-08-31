@@ -294,8 +294,9 @@ impl Default for VideoStreamConfig {
         Self {
             codec: VideoCodec::H264,
             max_bit_rate: crate::constants::DEFAULT_VIDEO_MAX_BIT_RATE,
-            max_frame_rate: Framerate::new(crate::constants::DEFAULT_FRAME_RATE, 1),
-            resolutions: vec![Resolution::new(1920, 1080)],
+            max_frame_rate: Framerate::new(crate::constants::DEFAULT_FRAME_RATE, 1)
+                .expect("default framerate is valid"),
+            resolutions: vec![Resolution::new(1920, 1080).expect("default resolution is valid")],
             target_delay: DEFAULT_TARGET_PLAYOUT_DELAY,
         }
     }

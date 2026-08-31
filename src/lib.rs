@@ -29,7 +29,10 @@ mod transport;
 pub use answer::{
     Answer, AudioConstraints, Constraints, Dimensions, DisplayDescription, VideoConstraints,
 };
-pub use codec::{AudioCodec, CastMode, Framerate, Resolution, StreamType, VideoCodec};
+pub use codec::{
+    AudioCodec, CastMode, Framerate, InvalidFramerate, InvalidResolution, Resolution, StreamType,
+    VideoCodec,
+};
 pub use control::{
     AppAvailability, AuthenticatedDeviceInfo, AuthenticatedEurekaInfo, CastApp, CastConnection,
     ControlCloseReason, ControlEvent, DeviceIdentity, EurekaInfoOutcome, ReceiverStatus,

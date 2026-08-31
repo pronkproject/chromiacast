@@ -172,8 +172,8 @@ async fn rendered_pixels_match_input() {
         .video(VideoStreamConfig {
             codec: VideoCodec::H264,
             max_bit_rate: 5_000_000,
-            max_frame_rate: Framerate::new(30, 1),
-            resolutions: vec![Resolution::new(WIDTH as u32, HEIGHT as u32)],
+            max_frame_rate: Framerate::new(30, 1).unwrap(),
+            resolutions: vec![Resolution::new(WIDTH as u32, HEIGHT as u32).unwrap()],
             target_delay: Duration::from_millis(400),
         })
         .build();
