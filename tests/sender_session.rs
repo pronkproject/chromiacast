@@ -746,6 +746,77 @@ async fn statistics_report_pressure_ack_and_retransmission() {
     session.shutdown().await.unwrap();
 }
 
+#[tokio::test(start_paused = true)]
+async fn feedback_statistics_are_coalesced_behind_one_shot_deadline() {
+    let offer = build_test_offer();
+    let answer = build_test_answer();
+    let (transport, control) = mock_transport();
+    let (session, mut events) =
+        SenderSession::start(&offer, &answer, IpAddr::V4(Ipv4Addr::LOCALHOST), transport)
+            .await
+            .unwrap();
+    let video = session.video().unwrap();
+    let video_sync_source = offer_sync_source(&offer, 1);
+
+    video
+        .send(
+            encoded_frame(
+                FrameDependency::KeyFrame,
+                Bytes::from_static(b"keyframe"),
+                Duration::ZERO,
+            )
+            .with_duration(Duration::from_millis(33)),
+        )
+        .await
+        .unwrap();
+    video
+        .send(
+            encoded_frame(
+                FrameDependency::Delta,
+                Bytes::from_static(b"delta"),
+                Duration::from_millis(33),
+            )
+            .with_duration(Duration::from_millis(33)),
+        )
+        .await
+        .unwrap();
+
+    tokio::time::advance(Duration::from_millis(99)).await;
+    tokio::task::yield_now().await;
+    assert!(matches!(
+        events.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+    ));
+
+    control
+        .inject(build_cast_feedback(30000, video_sync_source, 1, 400))
+        .await;
+    tokio::task::yield_now().await;
+    while let Ok(event) = events.try_recv() {
+        assert!(!matches!(event, SenderEvent::StatisticsUpdated(_)));
+    }
+
+    tokio::time::advance(Duration::from_millis(1)).await;
+    tokio::task::yield_now().await;
+    let mut statistics = None;
+    while let Ok(event) = events.try_recv() {
+        if let SenderEvent::StatisticsUpdated(event_statistics) = event {
+            statistics = Some(event_statistics);
+        }
+    }
+    let video_statistics = statistics.expect("debounced statistics").video.unwrap();
+    assert_eq!(video_statistics.frames_acked, 2);
+    assert_eq!(video_statistics.in_flight_frames, 0);
+
+    tokio::time::advance(Duration::from_millis(500)).await;
+    tokio::task::yield_now().await;
+    while let Ok(event) = events.try_recv() {
+        assert!(!matches!(event, SenderEvent::StatisticsUpdated(_)));
+    }
+
+    session.shutdown().await.unwrap();
+}
+
 #[tokio::test]
 async fn receiver_report_updates_rtt_and_loss_statistics() {
     let offer = build_test_offer();
