@@ -2,6 +2,17 @@
 
 All notable changes to Chromiacast are documented in this file.
 
+## 0.3.1 - 2026-09-03
+
+This release makes sender statistics notifications follow receiver feedback:
+
+- externally visible feedback changes schedule a one-shot notification after
+  a 100 millisecond debounce window;
+- closely spaced acknowledgments are coalesced into one notification with the
+  latest sender state; and
+- unchanged state no longer produces periodic application wakeups alongside
+  RTCP reports.
+
 ## 0.3.0 - 2026-08-31
 
 This release makes outbound Cast stream configuration checked before it reaches
