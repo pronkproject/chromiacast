@@ -6,7 +6,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::{interval_at, Instant, Interval, MissedTickBehavior};
 
 use crate::codec::StreamType;
-use crate::constants::{BURST_INTERVAL, MAX_BURST_BITRATE, RTCP_REPORT_INTERVAL};
+use crate::constants::{
+    BURST_INTERVAL, MAX_BURST_BITRATE, RTCP_REPORT_INTERVAL, STATISTICS_DEBOUNCE_INTERVAL,
+};
 use crate::error::{EnqueueError, PlayoutDelayError, SenderError};
 use crate::frame::{EncodedFrame, FrameId};
 use crate::rtcp::{self, CompoundRtcpPacket, SenderReportBuilder};
@@ -58,6 +60,17 @@ impl AcknowledgementWatchdog {
 struct AcknowledgementProgress {
     audio: bool,
     video: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StreamFeedbackState {
+    pressure_limited: bool,
+    max_acceptable_in_flight_duration: Duration,
+    current_rtt: Option<Duration>,
+    receiver_playout_delay: Option<Duration>,
+    nack_count: u64,
+    frames_dropped_or_skipped: u64,
+    fraction_lost: Option<u8>,
 }
 
 struct BurstBudget {
@@ -173,6 +186,10 @@ pub(crate) async fn run<T: Transport>(
 ) -> Result<(), SenderError> {
     let mut burst_timer = make_timer(BURST_INTERVAL);
     let mut rtcp_timer = make_timer(RTCP_REPORT_INTERVAL);
+    let statistics_timer = tokio::time::sleep(STATISTICS_DEBOUNCE_INTERVAL);
+    tokio::pin!(statistics_timer);
+    let mut statistics_pending = false;
+    let mut statistics_trigger_count = 0u64;
     let mut timeout_timer = make_timer(RECEIVER_TIMEOUT_POLL_INTERVAL);
     let mut receive_buffer = vec![0u8; 2048];
     let mut audio_watchdog = AcknowledgementWatchdog::default();
@@ -182,13 +199,19 @@ pub(crate) async fn run<T: Transport>(
     loop {
         tokio::select! {
             command = command_receiver.recv() => {
+                let mut publish_statistics = false;
                 let flush = match command {
                     Some(StreamCommand::EnqueueFrame { stream, frame, result_sender }) => {
+                        let feedback_before =
+                            stream_feedback_state(stream, &audio_stream, &video_stream);
                         let result = match stream {
                             StreamType::Audio => audio_stream.as_mut().map(|stream| stream.enqueue_frame(frame)),
                             StreamType::Video => video_stream.as_mut().map(|stream| stream.enqueue_frame(frame)),
                         };
                         let flush = result.as_ref().is_some_and(Result::is_ok);
+                        publish_statistics = result.as_ref().is_some_and(Result::is_err)
+                            || feedback_before
+                                != stream_feedback_state(stream, &audio_stream, &video_stream);
                         let _ = result_sender.send(result.unwrap_or(Err(EnqueueError::SessionClosed)));
                         flush
                     }
@@ -197,11 +220,15 @@ pub(crate) async fn run<T: Transport>(
                         false
                     }
                     Some(StreamCommand::SetTargetPlayoutDelay { delay, result_sender }) => {
+                        let feedback_before = session_feedback_state(&audio_stream, &video_stream);
                         let result = set_target_playout_delay(
                             &mut audio_stream,
                             &mut video_stream,
                             delay,
                         );
+                        publish_statistics = result.is_ok()
+                            && feedback_before
+                                != session_feedback_state(&audio_stream, &video_stream);
                         let _ = result_sender.send(result);
                         false
                     }
@@ -223,6 +250,15 @@ pub(crate) async fn run<T: Transport>(
                     ).await {
                         emit_fatal(&event_sender, &error);
                         return Err(error);
+                    }
+                }
+                if publish_statistics {
+                    statistics_trigger_count = statistics_trigger_count.saturating_add(1);
+                    if !statistics_pending {
+                        statistics_pending = true;
+                        statistics_timer
+                            .as_mut()
+                            .reset(Instant::now() + STATISTICS_DEBOUNCE_INTERVAL);
                     }
                 }
             }
@@ -274,6 +310,8 @@ pub(crate) async fn run<T: Transport>(
                             "received compound RTCP feedback",
                         );
                         let received_at = StdInstant::now();
+                        let feedback_before =
+                            session_feedback_state(&audio_stream, &video_stream);
                         let progress = process_feedback(
                             compound,
                             received_at,
@@ -306,6 +344,15 @@ pub(crate) async fn run<T: Transport>(
                         ).await {
                             emit_fatal(&event_sender, &error);
                             return Err(error);
+                        }
+                        if feedback_before != session_feedback_state(&audio_stream, &video_stream) {
+                            statistics_trigger_count = statistics_trigger_count.saturating_add(1);
+                            if !statistics_pending {
+                                statistics_pending = true;
+                                statistics_timer
+                                    .as_mut()
+                                    .reset(Instant::now() + STATISTICS_DEBOUNCE_INTERVAL);
+                            }
                         }
                     }
                     Ok(_) => {}
@@ -340,6 +387,18 @@ pub(crate) async fn run<T: Transport>(
                         return Err(error);
                     }
                 }
+            }
+
+            _ = &mut statistics_timer, if statistics_pending => {
+                tracing::debug!(
+                    target: "chromiacast::sender",
+                    debounce_milliseconds = STATISTICS_DEBOUNCE_INTERVAL.as_millis(),
+                    triggers = statistics_trigger_count,
+                    coalesced_triggers = statistics_trigger_count.saturating_sub(1),
+                    "publishing debounced sender statistics",
+                );
+                statistics_pending = false;
+                statistics_trigger_count = 0;
                 emit_nonterminal(&event_sender, SenderEvent::StatisticsUpdated(Box::new(
                     session_statistics(&audio_stream, &video_stream),
                 )));
@@ -607,6 +666,38 @@ fn session_statistics(
     SessionStatistics::new(
         audio.as_ref().map(StreamState::statistics),
         video.as_ref().map(StreamState::statistics),
+    )
+}
+
+fn stream_feedback_state(
+    stream_type: StreamType,
+    audio: &Option<StreamState>,
+    video: &Option<StreamState>,
+) -> Option<StreamFeedbackState> {
+    let stream = match stream_type {
+        StreamType::Audio => audio.as_ref(),
+        StreamType::Video => video.as_ref(),
+    }?;
+    let statistics = stream.statistics();
+    Some(StreamFeedbackState {
+        pressure_limited: !statistics.max_acceptable_in_flight_duration.is_zero()
+            && statistics.in_flight_media_duration >= statistics.max_acceptable_in_flight_duration,
+        max_acceptable_in_flight_duration: statistics.max_acceptable_in_flight_duration,
+        current_rtt: statistics.current_rtt,
+        receiver_playout_delay: statistics.receiver_playout_delay,
+        nack_count: statistics.nack_count,
+        frames_dropped_or_skipped: statistics.frames_dropped_or_skipped,
+        fraction_lost: statistics.fraction_lost,
+    })
+}
+
+fn session_feedback_state(
+    audio: &Option<StreamState>,
+    video: &Option<StreamState>,
+) -> (Option<StreamFeedbackState>, Option<StreamFeedbackState>) {
+    (
+        stream_feedback_state(StreamType::Audio, audio, video),
+        stream_feedback_state(StreamType::Video, audio, video),
     )
 }
 
